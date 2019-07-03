@@ -66,8 +66,6 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
         var writeStream: Unmanaged<CFWriteStream>?
         
         // 2
-        pthread_mutex_lock(&mutex)
-        
         CFStreamCreatePairWithSocketToHost(kCFAllocatorDefault,
                                            "10.13.13.103" as CFString,
                                            1111,
@@ -85,8 +83,6 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
 
         inputStream.open()
         outputStream.open()
-        readyWrite = true
-        pthread_mutex_unlock(&mutex)
 //
 //        write2Socket(str: "jogn")
 //        joinChat(username: "exit")
@@ -176,7 +172,7 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
         guard let faceAnchor = anchor as? ARFaceAnchor
             else { return }
         
-        pthread_mutex_lock(&mutex);
+        
         if (!connection)
         {
             setupNetworkCommunication()
@@ -252,8 +248,8 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
             let faceMat = SCNMatrix4(mvp)
             let faceNode = SCNNode()
             faceNode.setWorldTransform(faceMat)
-            valsStr += float2data(number: NSNumber(value: faceNode.eulerAngles.x))
-            valsStr += float2data(number: NSNumber(value: faceNode.eulerAngles.y))
+            valsStr += float2data(number: NSNumber(value: restrictAngle(faceNode.eulerAngles.x)))
+            valsStr += float2data(number: NSNumber(value: restrictAngle(faceNode.eulerAngles.y)))
             var z_angle = faceNode.eulerAngles.z
             if (z_angle > 0) { z_angle -= 3.141592 }
             else { z_angle += 3.141592 }
@@ -280,10 +276,11 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
             
             
             valsStr += "\0\0\0"
+            pthread_mutex_lock(&mutex);
             write2Socket(str: valsStr)
             readyWrite = false
+            pthread_mutex_unlock(&mutex)
         }
-        pthread_mutex_unlock(&mutex)
     }
 
     func float2data(number: NSNumber) -> String {
