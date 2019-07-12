@@ -89,10 +89,22 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
 //        let data = "exit".data(using: .ascii)!
 //        _ = data.withUnsafeBytes { outputStream.write($0, maxLength: data.count) }
     }
+    func shutDownConnection() {
+        connection = false
+        readyWrite = false
+        inputStream.close()
+        outputStream.close()
+    }
     
-    func write2Socket(str: String) {
+    func write2Socket(str: String) -> Int {
+        var code = -1
         let data = "\(str)".data(using: .ascii)!
-        _ = data.withUnsafeBytes { outputStream.write($0, maxLength: data.count) }
+        _ = data.withUnsafeBytes { code = outputStream.write($0, maxLength: data.count) }
+        return code
+    }
+    
+    func handler(data: Data?, bool: Bool, error: Error?) {
+        shutDownConnection()
     }
     
     func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
@@ -108,6 +120,8 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
                 let str = String(cString: buffer)
                 print(str)
                 if (str == "1") { readyWrite = true }
+            } else {
+                shutDownConnection()
             }
             pthread_mutex_unlock(&mutex)
             
@@ -115,10 +129,7 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
             print("new message received")
         case Stream.Event.errorOccurred:
             print("error occurred")
-            inputStream.close()
-            outputStream.close()
-            connection = false
-            readyWrite = false
+            shutDownConnection()
             setupNetworkCommunication()
         case Stream.Event.hasSpaceAvailable:
             print("has space available")
@@ -172,13 +183,12 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
         guard let faceAnchor = anchor as? ARFaceAnchor
             else { return }
         
-        
         if (!connection)
         {
             setupNetworkCommunication()
         }
         
-        if (readyWrite) {
+        if (readyWrite && connection) {
             var vals = Array<NSNumber>()
             vals.append(faceAnchor.blendShapes[.eyeBlinkLeft]!)
             vals.append(faceAnchor.blendShapes[.eyeLookDownLeft]!)
@@ -248,8 +258,8 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
             let faceMat = SCNMatrix4(mvp)
             let faceNode = SCNNode()
             faceNode.setWorldTransform(faceMat)
-            valsStr += float2data(number: NSNumber(value: restrictAngle(faceNode.eulerAngles.x)))
-            valsStr += float2data(number: NSNumber(value: restrictAngle(faceNode.eulerAngles.y)))
+            valsStr += float2data(number: NSNumber(value: restrictAngle(a: faceNode.eulerAngles.x)))
+            valsStr += float2data(number: NSNumber(value: restrictAngle(a: faceNode.eulerAngles.y)))
             var z_angle = faceNode.eulerAngles.z
             if (z_angle > 0) { z_angle -= 3.141592 }
             else { z_angle += 3.141592 }
@@ -276,10 +286,14 @@ class ViewController: UIViewController, StreamDelegate, ARSCNViewDelegate, ARSes
             
             
             valsStr += "\0\0\0"
-            pthread_mutex_lock(&mutex);
-            write2Socket(str: valsStr)
-            readyWrite = false
-            pthread_mutex_unlock(&mutex)
+            let code = write2Socket(str: valsStr)
+            if (code > 0) {
+                pthread_mutex_lock(&mutex);
+                readyWrite = false
+                pthread_mutex_unlock(&mutex)
+            } else {
+                shutDownConnection()
+            }
         }
     }
 
